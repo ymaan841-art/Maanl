@@ -1,0 +1,69 @@
+name: Build ClipGenius AI APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Android SDK
+        run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses
+          sdkmanager --sdk_root="$ANDROID_HOME" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Extract Project
+        run: |
+          unzip -q Maanmy-app-with-apk-workflow.zip -d project
+          echo "Project extracted"
+
+      - name: Configure Firebase
+        run: |
+          PROJECT_DIR=$(dirname "$(find project -name settings.gradle.kts -print -quit)")
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "Android project not found"
+            exit 1
+          fi
+
+          mkdir -p "$PROJECT_DIR/app"
+          cp google-services.json "$PROJECT_DIR/app/google-services.json"
+
+          echo "Firebase configured"
+
+      - name: Build APK
+        run: |
+          PROJECT_DIR=$(dirname "$(find project -name settings.gradle.kts -print -quit)")
+          cd "$PROJECT_DIR"
+          gradle --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipGenius-AI-APK
+          path: project/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
